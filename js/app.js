@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initTheme();
     applySavedSectionOrder();
+    applySavedCollapsedState(); // 開閉状態の復元
     loadSearchHistory();
     
     getAndDisplayLocationFast();
@@ -73,11 +74,10 @@ function getAndDisplayLocationFast() {
     if (statusDiv) statusDiv.textContent = '位置情報を取得中...';
     if (mapWarning) mapWarning.style.display = 'none';
 
-    // 最初は高精度（enableHighAccuracy: true）で試し、タイムアウトは10秒に調整
     const options = {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 0 // 再取得時はフレッシュなデータを要求
+        maximumAge: 0
     };
 
     navigator.geolocation.getCurrentPosition(
@@ -174,6 +174,7 @@ function updateUsername() {
     usersDb[newName] = currentPass;
     localStorage.setItem('app_users_db', JSON.stringify(usersDb));
 
+    // 設定データ引き継ぎ
     const oldHistory = localStorage.getItem(`history_${currentUser}`);
     if (oldHistory) {
         localStorage.setItem(`history_${newName}`, oldHistory);
@@ -184,6 +185,12 @@ function updateUsername() {
     if (oldOrder) {
         localStorage.setItem(`section_order_${newName}`, oldOrder);
         localStorage.removeItem(`section_order_${currentUser}`);
+    }
+
+    const oldCollapsed = localStorage.getItem(`collapsed_sections_${currentUser}`);
+    if (oldCollapsed) {
+        localStorage.setItem(`collapsed_sections_${newName}`, oldCollapsed);
+        localStorage.removeItem(`collapsed_sections_${currentUser}`);
     }
 
     currentUser = newName;
@@ -321,6 +328,7 @@ function deleteAccount() {
 
     localStorage.removeItem(`history_${currentUser}`);
     localStorage.removeItem(`section_order_${currentUser}`);
+    localStorage.removeItem(`collapsed_sections_${currentUser}`);
     localStorage.removeItem(`save_history_setting_${currentUser}`);
 
     handleLogout();
@@ -348,12 +356,34 @@ function updateThemeButtonText(theme) {
     }
 }
 
-// --- セクション開閉 ---
+// --- セクション開閉（状態保存付き） ---
 function toggleSection(sectionId) {
     const section = document.getElementById(sectionId);
-    if (section) {
-        section.classList.toggle('collapsed');
-    }
+    if (!section) return;
+
+    section.classList.toggle('collapsed');
+
+    // 現在閉じているセクションのリストを取得して更新保存
+    const collapsedList = [];
+    document.querySelectorAll('.collapsible-section.collapsed').forEach(elem => {
+        collapsedList.push(elem.id);
+    });
+
+    localStorage.setItem(`collapsed_sections_${currentUser}`, JSON.stringify(collapsedList));
+}
+
+function applySavedCollapsedState() {
+    if (!currentUser) return;
+    const saved = localStorage.getItem(`collapsed_sections_${currentUser}`);
+    if (!saved) return;
+
+    const collapsedList = JSON.parse(saved);
+    collapsedList.forEach(id => {
+        const elem = document.getElementById(id);
+        if (elem) {
+            elem.classList.add('collapsed');
+        }
+    });
 }
 
 // --- ルート検索 ＆ 時間予測 ---
