@@ -1,0 +1,172 @@
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background-color: #121212;
+    color: #f0f0f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    user-select: none;
+}
+
+/* スプラッシュ画面 */
+#splash-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #121212;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    z-index: 1000;
+    transition: opacity 0.4s ease-out;
+    opacity: 1;
+}
+
+#splash-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+#splash-image-logo {
+    width: 100px;
+    height: auto;
+    margin-bottom: 15px;
+}
+
+/* ログインカードコンテナ */
+.login-card {
+    background-color: #1e1e1e;
+    border: 1px solid #3c3c3c;
+    border-radius: 16px;
+    padding: 35px 25px;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.4s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.login-logo {
+    width: 80px;
+    height: auto;
+    margin-bottom: 15px;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));
+}
+
+h2 {
+    color: #8be9fd;
+    font-size: 1.4em;
+    margin: 0 0 8px 0;
+}
+
+.login-subtext {
+    font-size: 0.85em;
+    color: #a0a0a0;
+    margin-bottom: 25px;
+}
+
+.input-group {
+    margin-bottom: 16px;
+}
+
+/* パスワード目の表示ボタン */
+.password-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.toggle-password-btn {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 4px 8px;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.toggle-password-btn:hover {
+    opacity: 1;
+}
+
+input[type="text"], input[type="password"] {
+    width: 100%;
+    background-color: #282a36;
+    color: #f8f8f2;
+    border: 1px solid #44475a;
+    padding: 14px;
+    padding-right: 45px;
+    border-radius: 8px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    user-select: text;
+}
+
+input[type="text"]:focus, input[type="password"]:focus {
+    border-color: #8be9fd;
+    box-shadow: 0 0 8px rgba(139, 233, 253, 0.3);
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin: 15px 0 25px 0;
+    font-size: 0.85em;
+    color: #bd93f9;
+}
+
+.checkbox-group label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #6272a4;
+    cursor: pointer;
+}
+
+.login-btn {
+    width: 100%;
+    background-color: #6272a4;
+    color: #ffffff;
+    border: none;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.login-btn:hover {
+    background-color: #50608f;
+}
+
+.login-btn:active {
+    transform: scale(0.98);
+}

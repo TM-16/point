@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交通アプリ</title>
+    
+    <!-- iOS アプリ化設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="交通アプリ">
+    <link rel="apple-touch-icon" href="img/IMG_0439.png">
+    
+    <link rel="manifest" href="json/manifest.json" crossorigin="use-credentials">
+    <link rel="stylesheet" href="css/app.css"> 
+</head>
+<body class="dark-mode">
+    <!-- スプラッシュ画面 -->
+    <div id="splash-screen">
+        <img id="splash-image-logo" src="img/IMG_0439.png" alt="アプリロゴ">
+        <p>位置情報を取得中...</p> 
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div id="main-content" style="display: none;">
+        <!-- 上部バー -->
+        <div class="top-bar">
+            <div id="user-info">
+                👤 <span id="current-user-display" style="font-weight: bold;"></span>
+                <button onclick="handleLogout()" class="small-btn">ログアウト</button>
+            </div>
+            <div class="top-right-controls">
+                <button id="theme-toggle-btn" onclick="toggleTheme()" class="small-btn">☀️ ライト</button>
+                <button onclick="openSettingsModal()" class="small-btn icon-btn">⚙️ 設定</button>
+            </div>
+        </div>
+
+        <!-- 並び替え可能なカードコンテナ -->
+        <div id="app-sections-container">
+            <!-- 1. 時刻 ＆ Google検索 -->
+            <section id="header-section" class="app-card" data-section-id="header-section">
+                <div id="current-time">時刻を取得中...</div>
+                <div id="google-search-section">
+                    <h3>🌐 Google検索</h3>
+                    <div class="search-box">
+                        <input type="text" id="google-search-input" placeholder="Googleで検索...">
+                        <button onclick="performGoogleSearch()">検索</button>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- 2. 現在地 ＆ ルートマップ -->
+            <section id="location-section" class="app-card collapsible-section" data-section-id="location-section">
+                <h2 onclick="toggleSection('location-section')">
+                    <span>現在地 ＆ ルートマップ</span>
+                    <span class="toggle-icon">▼</span>
+                </h2>
+                <div class="section-content">
+                    <div class="location-header">
+                        <div id="location-status">位置情報を取得中...</div>
+                        <button onclick="getAndDisplayLocationFast()" class="small-btn reload-btn">🔄 再取得</button>
+                    </div>
+                    <div id="map-warning" class="warning" style="display: none;"></div>
+                    <iframe id="map-iframe" frameborder="0" allowfullscreen></iframe>
+                </div>
+            </section>
+
+            <!-- 3. 地域交通情報 -->
+            <section id="bus-section" class="app-card collapsible-section" data-section-id="bus-section">
+                <h2 onclick="toggleSection('bus-section')">
+                    <span>🚌 地域交通情報</span>
+                    <span class="toggle-icon">▼</span>
+                </h2>
+                <div class="section-content">
+                    <h3>時刻表サイトへ移動</h3>
+                    <button class="full-btn" onclick="goToTrainScheduleSite()">🚃 電車時刻表 (ナビタイム) へ</button>
+                    <button class="full-btn" onclick="window.open('https://www.navitime.co.jp/transfer/', '_blank')">🚌 バス時刻表 (ナビタイム) へ</button>
+                    <hr class="divider">
+                    <input type="text" id="bus-schedule-url" placeholder="その他の運行情報サイトのURLを入力">
+                    <button class="full-btn" onclick="goToBusScheduleSite()">任意のサイトへ移動</button>
+                </div>
+            </section>
+
+            <!-- 4. 目的地までの経路・時間予測 -->
+            <section id="route-section" class="app-card collapsible-section" data-section-id="route-section">
+                <h2 onclick="toggleSection('route-section')">
+                    <span>目的地までの経路・時間予測</span>
+                    <span class="toggle-icon">▼</span>
+                </h2>
+                <div class="section-content">
+                    <div class="search-box">
+                        <input type="text" id="destination" placeholder="目的地を入力 (例: 東京駅)">
+                        <button onclick="calculateRouteAndDisplay()">検索</button>
+                    </div>
+                    
+                    <div id="search-history"></div>
+                    
+                    <h3>検索・所要時間予測結果</h3>
+                    <div id="distance">目安距離: -</div>
+                    <div id="travel-time-walking">🚶 徒歩: -</div>
+                    <div id="travel-time-bicycling">🚲 自転車: -</div>
+                    <div id="travel-time-driving">🚗 車: -</div>
+                    <div id="travel-time-transit">🚃 公共交通機関: -</div>
+                    <button id="open-maps-btn" class="full-btn" style="margin-top: 10px; display: none;" onclick="openExternalGoogleMaps()">Google Maps アプリで詳細ナビを開く</button>
+                </div>
+            </section>
+        </div>
+    </div> 
+
+    <!-- 設定モーダル画面 -->
+    <div id="settings-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>⚙️ アカウント・表示設定</h2>
+                <button onclick="closeSettingsModal()" class="close-btn">×</button>
+            </div>
+            <div class="modal-body">
+                <!-- ユーザー名変更 -->
+                <div class="setting-item">
+                    <label>ユーザー名の変更</label>
+                    <div class="input-with-btn">
+                        <input type="text" id="setting-new-username" placeholder="新しいユーザー名">
+                        <button onclick="updateUsername()">変更</button>
+                    </div>
+                </div>
+
+                <!-- パスワード変更 -->
+                <div class="setting-item">
+                    <label>パスワードの変更</label>
+                    <div class="input-group-vertical">
+                        <input type="password" id="setting-old-pass" placeholder="現在のパスワード">
+                        <input type="password" id="setting-new-pass" placeholder="新しいパスワード">
+                        <button onclick="updatePassword()" class="full-btn" style="margin-top: 6px;">パスワード更新</button>
+                    </div>
+                </div>
+
+                <!-- 履歴保存のON/OFF -->
+                <div class="setting-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="setting-save-history-toggle" onchange="toggleHistorySaveSetting()">
+                        目的地の検索履歴を残す
+                    </label>
+                </div>
+
+                <!-- 配置の変更 -->
+                <div class="setting-item">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="margin-bottom: 0;">カード配置の並び替え</label>
+                        <button onclick="resetSectionOrder()" class="small-btn" style="background-color: #44475a;">初期状態に戻す</button>
+                    </div>
+                    <p class="setting-subtext">ボタンで上下に移動できます</p>
+                    <div id="reorder-list"></div>
+                </div>
+
+                <!-- アカウント削除 -->
+                <div class="setting-item danger-zone">
+                    <label style="color: #ff5555;">アカウントの削除</label>
+                    <p class="setting-subtext">この端末からアカウントデータと検索履歴が完全に削除されます。</p>
+                    <button onclick="deleteAccount()" class="danger-btn full-btn">アカウントを削除する</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/app.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('js/sw.js');
+        });
+      }
+    </script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - 交通アプリ</title>
+    
+    <!-- iOS アプリ化設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="交通アプリ">
+    <link rel="apple-touch-icon" href="img/IMG_0439.png">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="json/manifest.json" crossorigin="use-credentials">
+    <link rel="stylesheet" href="css/login.css">
+</head>
+<body>
+    <!-- スプラッシュ画面 -->
+    <div id="splash-screen">
+        <img id="splash-image-logo" src="img/IMG_0439.png" alt="アプリロゴ">
+        <p>起動中...</p> 
+    </div>
+
+    <!-- ログインカード -->
+    <div class="login-card">
+        <img src="img/IMG_0439.png" alt="ロゴ" class="login-logo">
+        <h2>交通アプリ</h2>
+        <p class="login-subtext">ユーザー名とパスワードを入力してください</p>
+        
+        <div class="input-group">
+            <input type="text" id="login-username" placeholder="ユーザー名" autocomplete="username">
+        </div>
+        <div class="input-group password-wrapper">
+            <input type="password" id="login-password" placeholder="パスワード" autocomplete="current-password">
+            <button type="button" class="toggle-password-btn" onclick="togglePasswordVisibility('login-password', this)">👁️</button>
+        </div>
+        <div class="checkbox-group">
+            <label>
+                <input type="checkbox" id="remember-me" checked> 
+                ログイン状態をこの端末に保存
+            </label>
+        </div>
+        
+        <button class="login-btn" onclick="handleLogin()">ログイン / アカウント作成</button>
+    </div>
+
+    <script src="js/login.js"></script>
+</body>
+</html>

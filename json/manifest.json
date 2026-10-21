@@ -1,0 +1,22 @@
+{
+  "name": "交通アプリ",
+  "short_name": "交通アプリ",
+  "icons": [
+    {
+      "src": "../img/IMG_0439.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "../img/IMG_0439.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "../point.html",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#121212"
+}

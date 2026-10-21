@@ -1,0 +1,566 @@
+// グローバル変数
+let currentLatitude = null;
+let currentLongitude = null;
+let currentUser = null;
+let lastDestination = '';
+
+// カードの初期順序定義
+const DEFAULT_SECTION_ORDER = ['header-section', 'location-section', 'bus-section', 'route-section'];
+const SECTION_NAMES = {
+    'header-section': '時刻 ＆ Google検索',
+    'location-section': '現在地 ＆ ルートマップ',
+    'bus-section': '🚌 地域交通情報',
+    'route-section': '目的地までの経路・時間予測'
+};
+
+// DOM要素
+let mapIframe, statusDiv, mapWarning, destinationInput, distanceDiv, historyDiv, mainContent, googleSearchInput;
+
+document.addEventListener('DOMContentLoaded', () => {
+    currentUser = localStorage.getItem('current_active_user');
+    if (!currentUser) {
+        window.location.href = 'login.html';
+        return;
+    }
+
+    mapIframe = document.getElementById('map-iframe');
+    statusDiv = document.getElementById('location-status');
+    mapWarning = document.getElementById('map-warning');
+    destinationInput = document.getElementById('destination');
+    distanceDiv = document.getElementById('distance');
+    historyDiv = document.getElementById('search-history'); 
+    mainContent = document.getElementById('main-content');
+    googleSearchInput = document.getElementById('google-search-input');
+
+    const display = document.getElementById('current-user-display');
+    if (display) display.textContent = currentUser;
+
+    initTheme();
+    applySavedSectionOrder();
+    loadSearchHistory();
+    
+    getAndDisplayLocationFast();
+
+    updateTime();
+    setInterval(updateTime, 1000);
+});
+
+// --- ログアウト ---
+function handleLogout() {
+    localStorage.removeItem('current_active_user');
+    localStorage.removeItem('saved_username');
+    localStorage.removeItem('saved_password');
+    window.location.href = 'login.html';
+}
+
+function hideSplash() {
+    const splash = document.getElementById('splash-screen');
+    if (splash) {
+        splash.classList.add('hidden');
+        setTimeout(() => splash.style.display = 'none', 400);
+    }
+}
+
+// --- 高速 ＆ 再取得用位置情報処理 ---
+function getAndDisplayLocationFast() {
+    if (!navigator.geolocation) {
+        if (statusDiv) statusDiv.textContent = 'Geolocation API非対応です';
+        hideSplash();
+        if (mainContent) mainContent.style.display = 'block';
+        return;
+    }
+
+    if (statusDiv) statusDiv.textContent = '位置情報を取得中...';
+    if (mapWarning) mapWarning.style.display = 'none';
+
+    // 最初は高精度（enableHighAccuracy: true）で試し、タイムアウトは10秒に調整
+    const options = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0 // 再取得時はフレッシュなデータを要求
+    };
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            currentLatitude = position.coords.latitude;
+            currentLongitude = position.coords.longitude;
+            
+            if (statusDiv) {
+                statusDiv.textContent = `現在地: 緯度 ${currentLatitude.toFixed(4)}, 経度 ${currentLongitude.toFixed(4)}`;
+            }
+            if (mapIframe) {
+                mapIframe.src = `https://maps.google.com/maps?q=${currentLatitude},${currentLongitude}&z=15&output=embed`;
+                mapIframe.style.display = 'block';
+            }
+            if (mapWarning) mapWarning.style.display = 'none';
+            
+            hideSplash();
+            if (mainContent) mainContent.style.display = 'block';
+        },
+        (error) => {
+            let errorMsg = '🚨 位置情報が取得できませんでした。';
+            
+            switch (error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMsg = '🚨 位置情報の利用が拒否されています。ブラウザや端末の設定で「位置情報のアクセス権限」を「許可」にしてください。';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMsg = '🚨 電波状況等により現在地を判定できませんでした。通信環境を確認して再度お試しください。';
+                    break;
+                case error.TIMEOUT:
+                    errorMsg = '🚨 位置情報の取得がタイムアウトしました。もう一度「🔄 再取得」を押してください。';
+                    break;
+            }
+
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                errorMsg += ' (※Webサイトが https:// で保護されていない場合、スマホの位置情報は機能しません)';
+            }
+
+            if (statusDiv) statusDiv.textContent = '位置情報の取得に失敗しました';
+            if (mapWarning) {
+                mapWarning.textContent = errorMsg;
+                mapWarning.style.display = 'block';
+            }
+
+            hideSplash();
+            if (mainContent) mainContent.style.display = 'block';
+        },
+        options
+    );
+}
+
+// --- 設定モーダル制御 ---
+function openSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (!modal) return;
+
+    document.getElementById('setting-new-username').value = '';
+    document.getElementById('setting-old-pass').value = '';
+    document.getElementById('setting-new-pass').value = '';
+
+    const historySaveSetting = localStorage.getItem(`save_history_setting_${currentUser}`);
+    const isHistoryEnabled = historySaveSetting === null ? true : JSON.parse(historySaveSetting);
+    document.getElementById('setting-save-history-toggle').checked = isHistoryEnabled;
+
+    renderReorderList();
+    modal.style.display = 'flex';
+}
+
+function closeSettingsModal() {
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+// --- ユーザー名変更 ---
+function updateUsername() {
+    const newName = document.getElementById('setting-new-username').value.trim();
+    if (!newName) {
+        alert('新しいユーザー名を入力してください。');
+        return;
+    }
+    if (newName === currentUser) {
+        alert('現在のユーザー名と同じです。');
+        return;
+    }
+
+    const usersDb = JSON.parse(localStorage.getItem('app_users_db') || '{}');
+    if (usersDb[newName]) {
+        alert('そのユーザー名はすでに使用されています。');
+        return;
+    }
+
+    const currentPass = usersDb[currentUser];
+    delete usersDb[currentUser];
+    usersDb[newName] = currentPass;
+    localStorage.setItem('app_users_db', JSON.stringify(usersDb));
+
+    const oldHistory = localStorage.getItem(`history_${currentUser}`);
+    if (oldHistory) {
+        localStorage.setItem(`history_${newName}`, oldHistory);
+        localStorage.removeItem(`history_${currentUser}`);
+    }
+
+    const oldOrder = localStorage.getItem(`section_order_${currentUser}`);
+    if (oldOrder) {
+        localStorage.setItem(`section_order_${newName}`, oldOrder);
+        localStorage.removeItem(`section_order_${currentUser}`);
+    }
+
+    currentUser = newName;
+    localStorage.setItem('current_active_user', currentUser);
+    if (localStorage.getItem('saved_username')) {
+        localStorage.setItem('saved_username', currentUser);
+    }
+
+    document.getElementById('current-user-display').textContent = currentUser;
+    alert('ユーザー名を変更しました。');
+    closeSettingsModal();
+}
+
+// --- パスワード変更 ---
+function updatePassword() {
+    const oldPass = document.getElementById('setting-old-pass').value.trim();
+    const newPass = document.getElementById('setting-new-pass').value.trim();
+
+    if (!oldPass || !newPass) {
+        alert('現在のパスワードと新しいパスワードの両方を入力してください。');
+        return;
+    }
+
+    const usersDb = JSON.parse(localStorage.getItem('app_users_db') || '{}');
+    if (usersDb[currentUser] !== oldPass) {
+        alert('現在のパスワードが間違っています。');
+        return;
+    }
+
+    usersDb[currentUser] = newPass;
+    localStorage.setItem('app_users_db', JSON.stringify(usersDb));
+
+    if (localStorage.getItem('saved_password')) {
+        localStorage.setItem('saved_password', newPass);
+    }
+
+    alert('パスワードを変更しました。');
+    closeSettingsModal();
+}
+
+// --- 履歴保持ON/OFF ---
+function toggleHistorySaveSetting() {
+    const isChecked = document.getElementById('setting-save-history-toggle').checked;
+    localStorage.setItem(`save_history_setting_${currentUser}`, JSON.stringify(isChecked));
+    if (!isChecked) {
+        localStorage.removeItem(`history_${currentUser}`);
+        loadSearchHistory();
+    }
+}
+
+// --- カード配置の並び替え ---
+function getCurrentSectionOrder() {
+    const savedOrder = localStorage.getItem(`section_order_${currentUser}`);
+    return savedOrder ? JSON.parse(savedOrder) : [...DEFAULT_SECTION_ORDER];
+}
+
+function applySavedSectionOrder() {
+    const container = document.getElementById('app-sections-container');
+    if (!container) return;
+
+    const order = getCurrentSectionOrder();
+    order.forEach(id => {
+        const elem = document.querySelector(`[data-section-id="${id}"]`);
+        if (elem) container.appendChild(elem);
+    });
+}
+
+function renderReorderList() {
+    const listContainer = document.getElementById('reorder-list');
+    if (!listContainer) return;
+
+    const order = getCurrentSectionOrder();
+    listContainer.innerHTML = '';
+
+    order.forEach((id, index) => {
+        const item = document.createElement('div');
+        item.className = 'reorder-item';
+        
+        const label = document.createElement('span');
+        label.textContent = SECTION_NAMES[id] || id;
+
+        const btns = document.createElement('div');
+        btns.className = 'reorder-btns';
+
+        if (index > 0) {
+            const upBtn = document.createElement('button');
+            upBtn.textContent = '▲';
+            upBtn.onclick = () => moveSectionOrder(index, -1);
+            btns.appendChild(upBtn);
+        }
+
+        if (index < order.length - 1) {
+            const downBtn = document.createElement('button');
+            downBtn.textContent = '▼';
+            downBtn.onclick = () => moveSectionOrder(index, 1);
+            btns.appendChild(downBtn);
+        }
+
+        item.appendChild(label);
+        item.appendChild(btns);
+        listContainer.appendChild(item);
+    });
+}
+
+function moveSectionOrder(index, direction) {
+    const order = getCurrentSectionOrder();
+    const targetIndex = index + direction;
+
+    if (targetIndex < 0 || targetIndex >= order.length) return;
+
+    const temp = order[index];
+    order[index] = order[targetIndex];
+    order[targetIndex] = temp;
+
+    localStorage.setItem(`section_order_${currentUser}`, JSON.stringify(order));
+    applySavedSectionOrder();
+    renderReorderList();
+}
+
+function resetSectionOrder() {
+    if (!confirm('カードの配置を最初の状態に戻しますか？')) return;
+
+    localStorage.removeItem(`section_order_${currentUser}`);
+    applySavedSectionOrder();
+    renderReorderList();
+}
+
+// --- アカウント削除 ---
+function deleteAccount() {
+    if (!confirm('本当にアカウントを削除しますか？この操作は取り消せません。')) return;
+
+    const usersDb = JSON.parse(localStorage.getItem('app_users_db') || '{}');
+    delete usersDb[currentUser];
+    localStorage.setItem('app_users_db', JSON.stringify(usersDb));
+
+    localStorage.removeItem(`history_${currentUser}`);
+    localStorage.removeItem(`section_order_${currentUser}`);
+    localStorage.removeItem(`save_history_setting_${currentUser}`);
+
+    handleLogout();
+}
+
+// --- テーマ切り替え ---
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'dark-mode';
+    document.body.className = savedTheme;
+    updateThemeButtonText(savedTheme);
+}
+
+function toggleTheme() {
+    const isDark = document.body.classList.contains('dark-mode');
+    const newTheme = isDark ? 'light-mode' : 'dark-mode';
+    document.body.className = newTheme;
+    localStorage.setItem('theme', newTheme);
+    updateThemeButtonText(newTheme);
+}
+
+function updateThemeButtonText(theme) {
+    const btn = document.getElementById('theme-toggle-btn');
+    if (btn) {
+        btn.textContent = theme === 'dark-mode' ? '☀️ ライト' : '🌙 ダーク';
+    }
+}
+
+// --- セクション開閉 ---
+function toggleSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (section) {
+        section.classList.toggle('collapsed');
+    }
+}
+
+// --- ルート検索 ＆ 時間予測 ---
+function calculateRouteAndDisplay() {
+    const destination = destinationInput ? destinationInput.value.trim() : '';
+    if (!currentLatitude || !currentLongitude) {
+        alert('現在地が取得されていません。「🔄 再取得」ボタンを押してみてください。');
+        return;
+    }
+    if (!destination) {
+        alert('目的地を入力してください。');
+        return;
+    }
+
+    lastDestination = destination;
+    saveToSearchHistory(destination);
+
+    const origin = `${currentLatitude},${currentLongitude}`;
+    if (mapIframe) {
+        mapIframe.src = `https://maps.google.com/maps?saddr=${origin}&daddr=${encodeURIComponent(destination)}&output=embed`;
+        mapIframe.style.display = 'block';
+    }
+
+    fetchGeocodeAndCalculate(destination);
+
+    const openMapsBtn = document.getElementById('open-maps-btn');
+    if (openMapsBtn) openMapsBtn.style.display = 'block';
+}
+
+function fetchGeocodeAndCalculate(destination) {
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.length > 0) {
+                const destLat = parseFloat(data[0].lat);
+                const destLon = parseFloat(data[0].lon);
+                const distKm = getHaversineDistance(currentLatitude, currentLongitude, destLat, destLon);
+                displayEstimatedTimes(distKm);
+            } else {
+                displayFallbackTimes();
+            }
+        })
+        .catch(() => displayFallbackTimes());
+}
+
+function getHaversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function displayEstimatedTimes(distKm) {
+    let roadDist = distKm;
+    
+    if (distKm < 3) {
+        roadDist = distKm * 1.45;
+    } else if (distKm < 20) {
+        roadDist = distKm * 1.35;
+    } else {
+        roadDist = distKm * 1.25;
+    }
+
+    const walkMin = Math.round((roadDist / 4.0) * 60);         
+    const bikeMin = Math.round((roadDist / 14.0) * 60);        
+    const carMin = Math.round((roadDist / 25.0) * 60);         
+    const transitMin = Math.round((roadDist / 22.0) * 60) + 8; 
+
+    document.getElementById('distance').textContent = `目安距離: 約 ${roadDist.toFixed(1)} km`;
+    document.getElementById('travel-time-walking').textContent = `🚶 徒歩: 約 ${formatMinutes(walkMin)}`;
+    document.getElementById('travel-time-bicycling').textContent = `🚲 自転車: 約 ${formatMinutes(bikeMin)}`;
+    document.getElementById('travel-time-driving').textContent = `🚗 車: 約 ${formatMinutes(carMin)}`;
+    document.getElementById('travel-time-transit').textContent = `🚃 公共交通機関: 約 ${formatMinutes(transitMin)}`;
+}
+
+function displayFallbackTimes() {
+    document.getElementById('distance').textContent = `目安距離: マップをご確認ください`;
+    document.getElementById('travel-time-walking').textContent = `🚶 徒歩: マップで確認`;
+    document.getElementById('travel-time-bicycling').textContent = `🚲 自転車: マップで確認`;
+    document.getElementById('travel-time-driving').textContent = `🚗 車: マップで確認`;
+    document.getElementById('travel-time-transit').textContent = `🚃 公共交通機関: マップで確認`;
+}
+
+function formatMinutes(min) {
+    if (min < 60) return `${min} 分`;
+    return `${Math.floor(min / 60)} 時間 ${min % 60} 分`;
+}
+
+function openExternalGoogleMaps() {
+    if (!lastDestination || !currentLatitude) return;
+    window.open(`https://www.google.com/maps/dir/${currentLatitude},${currentLongitude}/${encodeURIComponent(lastDestination)}`, '_blank');
+}
+
+// --- 検索履歴管理 ---
+function getUserHistoryKey() {
+    return `history_${currentUser}`;
+}
+
+function loadSearchHistory() {
+    if (!historyDiv || !currentUser) return;
+
+    const historySaveSetting = localStorage.getItem(`save_history_setting_${currentUser}`);
+    const isHistoryEnabled = historySaveSetting === null ? true : JSON.parse(historySaveSetting);
+
+    if (!isHistoryEnabled) {
+        historyDiv.innerHTML = '';
+        return;
+    }
+
+    const history = JSON.parse(localStorage.getItem(getUserHistoryKey()) || '[]');
+    historyDiv.innerHTML = '';
+
+    if (history.length === 0) {
+        historyDiv.textContent = '履歴: なし';
+        return;
+    }
+
+    const label = document.createElement('span');
+    label.textContent = '履歴: ';
+    historyDiv.appendChild(label);
+
+    history.forEach(item => {
+        const span = document.createElement('span');
+        span.className = 'history-item';
+        
+        const textNode = document.createElement('span');
+        textNode.textContent = item;
+        textNode.onclick = () => {
+            if (destinationInput) destinationInput.value = item;
+        };
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-history-btn';
+        deleteBtn.textContent = '×';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            deleteHistoryItem(item);
+        };
+
+        span.appendChild(textNode);
+        span.appendChild(deleteBtn);
+        historyDiv.appendChild(span);
+    });
+}
+
+function saveToSearchHistory(destination) {
+    if (!destination || !currentUser) return;
+
+    const historySaveSetting = localStorage.getItem(`save_history_setting_${currentUser}`);
+    const isHistoryEnabled = historySaveSetting === null ? true : JSON.parse(historySaveSetting);
+    
+    if (!isHistoryEnabled) return;
+
+    let history = JSON.parse(localStorage.getItem(getUserHistoryKey()) || '[]');
+    history = history.filter(item => item !== destination);
+    history.unshift(destination);
+
+    if (history.length > 5) history = history.slice(0, 5);
+
+    localStorage.setItem(getUserHistoryKey(), JSON.stringify(history));
+    loadSearchHistory();
+}
+
+function deleteHistoryItem(itemToDelete) {
+    if (!currentUser) return;
+    let history = JSON.parse(localStorage.getItem(getUserHistoryKey()) || '[]');
+    history = history.filter(item => item !== itemToDelete);
+    localStorage.setItem(getUserHistoryKey(), JSON.stringify(history));
+    loadSearchHistory();
+}
+
+// --- ユーティリティ ---
+function performGoogleSearch() {
+    if (!googleSearchInput) return;
+    const query = googleSearchInput.value.trim();
+    if (query) {
+        window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, '_blank');
+        googleSearchInput.value = '';
+    } else {
+        alert('検索キーワードを入力してください。');
+    }
+}
+
+function goToTrainScheduleSite() {
+    window.open("https://www.navitime.co.jp/transfer/", '_blank');
+}
+
+function goToBusScheduleSite() {
+    const urlInput = document.getElementById('bus-schedule-url');
+    let url = urlInput ? urlInput.value.trim() : '';
+    if (!url) {
+        alert('URLを入力してください。');
+        return;
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+    }
+    window.open(url, '_blank');
+}
+
+function updateTime() {
+    const now = new Date();
+    const timeElem = document.getElementById('current-time');
+    if (timeElem) {
+        timeElem.textContent = `現在時刻: ${now.getHours()}時${now.getMinutes()}分${now.getSeconds()}秒`;
+    }
+}
