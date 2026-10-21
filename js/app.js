@@ -19,7 +19,7 @@ let mapIframe, statusDiv, mapWarning, destinationInput, distanceDiv, historyDiv,
 document.addEventListener('DOMContentLoaded', () => {
     currentUser = localStorage.getItem('current_active_user');
     if (!currentUser) {
-        window.location.href = 'login.html';
+        window.location.href = 'index.html';
         return;
     }
 
@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initTheme();
     applySavedSectionOrder();
-    applySavedCollapsedState(); // 開閉状態の復元
+    applySavedCollapsedState();
     loadSearchHistory();
     
     getAndDisplayLocationFast();
@@ -51,7 +51,7 @@ function handleLogout() {
     localStorage.removeItem('current_active_user');
     localStorage.removeItem('saved_username');
     localStorage.removeItem('saved_password');
-    window.location.href = 'login.html';
+    window.location.href = 'index.html';
 }
 
 function hideSplash() {
@@ -174,7 +174,6 @@ function updateUsername() {
     usersDb[newName] = currentPass;
     localStorage.setItem('app_users_db', JSON.stringify(usersDb));
 
-    // 設定データ引き継ぎ
     const oldHistory = localStorage.getItem(`history_${currentUser}`);
     if (oldHistory) {
         localStorage.setItem(`history_${newName}`, oldHistory);
@@ -363,7 +362,6 @@ function toggleSection(sectionId) {
 
     section.classList.toggle('collapsed');
 
-    // 現在閉じているセクションのリストを取得して更新保存
     const collapsedList = [];
     document.querySelectorAll('.collapsible-section.collapsed').forEach(elem => {
         collapsedList.push(elem.id);

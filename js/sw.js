@@ -1,6 +1,6 @@
-const CACHE_NAME = 'traffic-app-v1';
+const CACHE_NAME = 'traffic-app-v2';
 const ASSETS_TO_CACHE = [
-  '../login.html',
+  '../index.html',
   '../point.html',
   '../css/app.css',
   '../css/login.css',

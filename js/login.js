@@ -45,7 +45,6 @@ function handleLogin() {
     window.location.href = 'point.html';
 }
 
-// パスワードの表示/非表示切り替え
 function togglePasswordVisibility(inputId, btn) {
     const input = document.getElementById(inputId);
     if (!input) return;
