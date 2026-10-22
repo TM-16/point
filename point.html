@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>交通アプリ</title>
     
-    <!-- iOS アプリ化設定 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="交通アプリ">
@@ -35,7 +34,7 @@
             </div>
         </div>
 
-        <!-- 並び替え可能なカードコンテナ -->
+        <!-- カードコンテナ -->
         <div id="app-sections-container">
             <!-- 1. 時刻 ＆ Google検索 -->
             <section id="header-section" class="app-card" data-section-id="header-section">
@@ -93,7 +92,10 @@
                         <button onclick="calculateRouteAndDisplay()">検索</button>
                     </div>
                     
-                    <div id="search-history"></div>
+                    <div class="history-container-header">
+                        <div id="search-history"></div>
+                        <button id="clear-all-history-btn" onclick="clearAllSearchHistory()" class="small-btn clear-btn" style="display: none;">すべて消す</button>
+                    </div>
                     
                     <h3>検索・所要時間予測結果</h3>
                     <div id="distance">目安距離: -</div>
@@ -104,6 +106,34 @@
                     <button id="open-maps-btn" class="full-btn" style="margin-top: 10px; display: none;" onclick="openExternalGoogleMaps()">Google Maps アプリで詳細ナビを開く</button>
                 </div>
             </section>
+
+            <!-- 5. リアルタイム乗換案内 (最下部固定カード) -->
+            <section id="realtime-transit-section" class="app-card collapsible-section" data-section-id="realtime-transit-section">
+                <h2 onclick="toggleSection('realtime-transit-section')">
+                    <span>🚃 リアルタイム乗換案内 (ナビタイム連動)</span>
+                    <span class="toggle-icon">▼</span>
+                </h2>
+                <div class="section-content">
+                    <div class="input-group-vertical">
+                        <input type="text" id="rt-origin" placeholder="現在地 (必須 ex: 野幌駅)">
+                        <input type="text" id="rt-destination" placeholder="目的地 (必須 ex: 札幌駅)">
+                        <select id="rt-mode" class="custom-select">
+                            <option value="" disabled selected>移動手段を選択 (必須)</option>
+                            <option value="train">🚃 電車・鉄道優先</option>
+                            <option value="bus">🚌 路線バス優先</option>
+                            <option value="both">🚃🚌 電車＋バス両方</option>
+                        </select>
+                        <button onclick="searchNavitimeInApp()" class="full-btn register-btn-style" style="margin-top: 6px; font-weight: bold;">直近のダイヤをアプリ内で検索</button>
+                    </div>
+
+                    <!-- ナビタイム結果用カード内埋め込みウィンドウ -->
+                    <div id="rt-navitime-container" style="display: none; margin-top: 15px;">
+                        <h3>正確なリアルタイム検索結果</h3>
+                        <iframe id="rt-navitime-iframe" frameborder="0" style="width: 100%; height: 420px; border-radius: 8px; border: 1px solid var(--border-color); background: #ffffff;"></iframe>
+                        <button id="rt-open-external-btn" class="full-btn" style="margin-top: 10px;" onclick="openNavitimeInNewTab()">全画面でナビタイムを開く</button>
+                    </div>
+                </div>
+            </section>
         </div>
     </div> 
 
@@ -112,7 +142,7 @@
         <div class="modal-card">
             <div class="modal-header">
                 <h2>⚙️ アカウント・表示設定</h2>
-                <button onclick="closeSettingsModal()" class="close-btn">×</button>
+                <button onclick="cancelSettingsModal()" class="close-btn">×</button>
             </div>
             <div class="modal-body">
                 <!-- ユーザー名変更 -->
@@ -137,18 +167,26 @@
                 <!-- 履歴保存のON/OFF -->
                 <div class="setting-item">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="setting-save-history-toggle" onchange="toggleHistorySaveSetting()">
+                        <input type="checkbox" id="setting-save-history-toggle">
                         目的地の検索履歴を残す
                     </label>
                 </div>
 
-                <!-- 配置の変更 -->
+                <!-- ダブルタップ削除のON/OFF -->
+                <div class="setting-item">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="setting-dblclick-delete-toggle">
+                        履歴をダブルタップで削除できるようにする
+                    </label>
+                </div>
+
+                <!-- カード配置・ブラインド並び替え -->
                 <div class="setting-item">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <label style="margin-bottom: 0;">カード配置の並び替え</label>
+                        <label style="margin-bottom: 0;">カード表示・配置設定</label>
                         <button onclick="resetSectionOrder()" class="small-btn" style="background-color: #44475a;">初期状態に戻す</button>
                     </div>
-                    <p class="setting-subtext">ボタンで上下に移動できます</p>
+                    <p class="setting-subtext">👁️で表示/ブラインド切り替え、▲▼で順序変更ができます</p>
                     <div id="reorder-list"></div>
                 </div>
 
@@ -158,6 +196,12 @@
                     <p class="setting-subtext">この端末からアカウントデータと検索履歴が完全に削除されます。</p>
                     <button onclick="deleteAccount()" class="danger-btn full-btn">アカウントを削除する</button>
                 </div>
+            </div>
+
+            <!-- フッター：OK / CANCEL ボタン -->
+            <div class="modal-footer">
+                <button onclick="saveSettingsModal()" class="confirm-btn">OK</button>
+                <button onclick="cancelSettingsModal()" class="cancel-btn">CANCEL</button>
             </div>
         </div>
     </div>

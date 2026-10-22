@@ -3,15 +3,21 @@ let currentLatitude = null;
 let currentLongitude = null;
 let currentUser = null;
 let lastDestination = '';
+let currentNavitimeUrl = '';
 
-// カードの初期順序定義
-const DEFAULT_SECTION_ORDER = ['header-section', 'location-section', 'bus-section', 'route-section'];
+// カードの初期順序定義 (realtime-transit-section は一番下に配置)
+const DEFAULT_SECTION_ORDER = ['header-section', 'location-section', 'bus-section', 'route-section', 'realtime-transit-section'];
 const SECTION_NAMES = {
     'header-section': '時刻 ＆ Google検索',
     'location-section': '現在地 ＆ ルートマップ',
     'bus-section': '🚌 地域交通情報',
-    'route-section': '目的地までの経路・時間予測'
+    'route-section': '目的地までの経路・時間予測',
+    'realtime-transit-section': '🚃 リアルタイム乗換案内 (ナビタイム連動)'
 };
+
+// モーダル編集時の一時変数
+let tempSectionOrder = [];
+let tempBlindedSections = [];
 
 // DOM要素
 let mapIframe, statusDiv, mapWarning, destinationInput, distanceDiv, historyDiv, mainContent, googleSearchInput;
@@ -38,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     applySavedSectionOrder();
     applySavedCollapsedState();
+    applySavedBlindedState();
     loadSearchHistory();
     
     getAndDisplayLocationFast();
@@ -102,10 +109,10 @@ function getAndDisplayLocationFast() {
             
             switch (error.code) {
                 case error.PERMISSION_DENIED:
-                    errorMsg = '🚨 位置情報の利用が拒否されています。ブラウザや端末の設定で「位置情報のアクセス権限」を「許可」にしてください。';
+                    errorMsg = '🚨 位置情報の利用が拒否されています。ブラウザの設定で「位置情報アクセス権限」を「許可」にしてください。';
                     break;
                 case error.POSITION_UNAVAILABLE:
-                    errorMsg = '🚨 電波状況等により現在地を判定できませんでした。通信環境を確認して再度お試しください。';
+                    errorMsg = '🚨 電波状況等により現在地を判定できませんでした。';
                     break;
                 case error.TIMEOUT:
                     errorMsg = '🚨 位置情報の取得がタイムアウトしました。もう一度「🔄 再取得」を押してください。';
@@ -113,7 +120,7 @@ function getAndDisplayLocationFast() {
             }
 
             if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                errorMsg += ' (※Webサイトが https:// で保護されていない場合、スマホの位置情報は機能しません)';
+                errorMsg += ' (※Webサイトが https:// で保護されていない場合機能しません)';
             }
 
             if (statusDiv) statusDiv.textContent = '位置情報の取得に失敗しました';
@@ -129,6 +136,55 @@ function getAndDisplayLocationFast() {
     );
 }
 
+// --- ナビタイムアプリ内連動処理 (エラー対策済みURL生成) ---
+function searchNavitimeInApp() {
+    let origin = document.getElementById('rt-origin').value.trim();
+    let destination = document.getElementById('rt-destination').value.trim();
+    const mode = document.getElementById('rt-mode').value;
+
+    if (!origin) {
+        alert('現在地（発駅/発バス停）を入力してください。');
+        return;
+    }
+    if (!destination) {
+        alert('目的地（着駅/着バス停）を入力してください。');
+        return;
+    }
+    if (!mode) {
+        alert('移動手段を選択してください。');
+        return;
+    }
+
+    // 「駅」の文字を自動調整してパラメータエラーを防止
+    origin = origin.replace(/駅$/, '');
+    destination = destination.replace(/駅$/, '');
+
+    // ナビタイム公式の正しい乗換案内URLパラメータ構成
+    let targetUrl = `https://www.navitime.co.jp/transfer/searchlist?orvStationName=${encodeURIComponent(origin)}&dnvStationName=${encodeURIComponent(destination)}`;
+    
+    if (mode === 'train') {
+        targetUrl += `&bus=false`;
+    } else if (mode === 'bus') {
+        targetUrl += `&bus=true`;
+    }
+
+    currentNavitimeUrl = targetUrl;
+
+    const container = document.getElementById('rt-navitime-container');
+    const iframe = document.getElementById('rt-navitime-iframe');
+
+    if (container && iframe) {
+        iframe.src = targetUrl;
+        container.style.display = 'block';
+    }
+}
+
+function openNavitimeInNewTab() {
+    if (currentNavitimeUrl) {
+        window.open(currentNavitimeUrl, '_blank');
+    }
+}
+
 // --- 設定モーダル制御 ---
 function openSettingsModal() {
     const modal = document.getElementById('settings-modal');
@@ -142,11 +198,39 @@ function openSettingsModal() {
     const isHistoryEnabled = historySaveSetting === null ? true : JSON.parse(historySaveSetting);
     document.getElementById('setting-save-history-toggle').checked = isHistoryEnabled;
 
+    const dblclickDeleteSetting = localStorage.getItem(`dblclick_delete_setting_${currentUser}`);
+    const isDblclickEnabled = dblclickDeleteSetting === null ? true : JSON.parse(dblclickDeleteSetting);
+    document.getElementById('setting-dblclick-delete-toggle').checked = isDblclickEnabled;
+
+    tempSectionOrder = getCurrentSectionOrder();
+    tempBlindedSections = getCurrentBlindedSections();
+
     renderReorderList();
     modal.style.display = 'flex';
 }
 
-function closeSettingsModal() {
+function saveSettingsModal() {
+    const isHistorySaveChecked = document.getElementById('setting-save-history-toggle').checked;
+    localStorage.setItem(`save_history_setting_${currentUser}`, JSON.stringify(isHistorySaveChecked));
+    if (!isHistorySaveChecked) {
+        localStorage.removeItem(`history_${currentUser}`);
+    }
+
+    const isDblclickChecked = document.getElementById('setting-dblclick-delete-toggle').checked;
+    localStorage.setItem(`dblclick_delete_setting_${currentUser}`, JSON.stringify(isDblclickChecked));
+
+    localStorage.setItem(`section_order_${currentUser}`, JSON.stringify(tempSectionOrder));
+    localStorage.setItem(`blinded_sections_${currentUser}`, JSON.stringify(tempBlindedSections));
+
+    applySavedSectionOrder();
+    applySavedBlindedState();
+    loadSearchHistory();
+
+    const modal = document.getElementById('settings-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function cancelSettingsModal() {
     const modal = document.getElementById('settings-modal');
     if (modal) modal.style.display = 'none';
 }
@@ -192,6 +276,18 @@ function updateUsername() {
         localStorage.removeItem(`collapsed_sections_${currentUser}`);
     }
 
+    const oldBlinded = localStorage.getItem(`blinded_sections_${currentUser}`);
+    if (oldBlinded) {
+        localStorage.setItem(`blinded_sections_${newName}`, oldBlinded);
+        localStorage.removeItem(`blinded_sections_${currentUser}`);
+    }
+
+    const oldDblclick = localStorage.getItem(`dblclick_delete_setting_${currentUser}`);
+    if (oldDblclick) {
+        localStorage.setItem(`dblclick_delete_setting_${newName}`, oldDblclick);
+        localStorage.removeItem(`dblclick_delete_setting_${currentUser}`);
+    }
+
     currentUser = newName;
     localStorage.setItem('current_active_user', currentUser);
     if (localStorage.getItem('saved_username')) {
@@ -200,7 +296,6 @@ function updateUsername() {
 
     document.getElementById('current-user-display').textContent = currentUser;
     alert('ユーザー名を変更しました。');
-    closeSettingsModal();
 }
 
 // --- パスワード変更 ---
@@ -227,23 +322,17 @@ function updatePassword() {
     }
 
     alert('パスワードを変更しました。');
-    closeSettingsModal();
 }
 
-// --- 履歴保持ON/OFF ---
-function toggleHistorySaveSetting() {
-    const isChecked = document.getElementById('setting-save-history-toggle').checked;
-    localStorage.setItem(`save_history_setting_${currentUser}`, JSON.stringify(isChecked));
-    if (!isChecked) {
-        localStorage.removeItem(`history_${currentUser}`);
-        loadSearchHistory();
-    }
-}
-
-// --- カード配置の並び替え ---
+// --- カード配置 ＆ ブラインド管理 ---
 function getCurrentSectionOrder() {
     const savedOrder = localStorage.getItem(`section_order_${currentUser}`);
     return savedOrder ? JSON.parse(savedOrder) : [...DEFAULT_SECTION_ORDER];
+}
+
+function getCurrentBlindedSections() {
+    const savedBlinded = localStorage.getItem(`blinded_sections_${currentUser}`);
+    return savedBlinded ? JSON.parse(savedBlinded) : [];
 }
 
 function applySavedSectionOrder() {
@@ -257,16 +346,30 @@ function applySavedSectionOrder() {
     });
 }
 
+function applySavedBlindedState() {
+    const blindedList = getCurrentBlindedSections();
+    DEFAULT_SECTION_ORDER.forEach(id => {
+        const elem = document.getElementById(id);
+        if (elem) {
+            if (blindedList.includes(id)) {
+                elem.classList.add('blinded');
+            } else {
+                elem.classList.remove('blinded');
+            }
+        }
+    });
+}
+
 function renderReorderList() {
     const listContainer = document.getElementById('reorder-list');
     if (!listContainer) return;
 
-    const order = getCurrentSectionOrder();
     listContainer.innerHTML = '';
 
-    order.forEach((id, index) => {
+    tempSectionOrder.forEach((id, index) => {
         const item = document.createElement('div');
-        item.className = 'reorder-item';
+        const isBlinded = tempBlindedSections.includes(id);
+        item.className = `reorder-item ${isBlinded ? 'is-blinded' : ''}`;
         
         const label = document.createElement('span');
         label.textContent = SECTION_NAMES[id] || id;
@@ -274,17 +377,22 @@ function renderReorderList() {
         const btns = document.createElement('div');
         btns.className = 'reorder-btns';
 
+        const blindBtn = document.createElement('button');
+        blindBtn.textContent = isBlinded ? '🙈 隠す' : '👁️ 表示';
+        blindBtn.onclick = () => toggleTempBlind(id);
+        btns.appendChild(blindBtn);
+
         if (index > 0) {
             const upBtn = document.createElement('button');
             upBtn.textContent = '▲';
-            upBtn.onclick = () => moveSectionOrder(index, -1);
+            upBtn.onclick = () => moveTempSectionOrder(index, -1);
             btns.appendChild(upBtn);
         }
 
-        if (index < order.length - 1) {
+        if (index < tempSectionOrder.length - 1) {
             const downBtn = document.createElement('button');
             downBtn.textContent = '▼';
-            downBtn.onclick = () => moveSectionOrder(index, 1);
+            downBtn.onclick = () => moveTempSectionOrder(index, 1);
             btns.appendChild(downBtn);
         }
 
@@ -294,26 +402,31 @@ function renderReorderList() {
     });
 }
 
-function moveSectionOrder(index, direction) {
-    const order = getCurrentSectionOrder();
+function toggleTempBlind(id) {
+    if (tempBlindedSections.includes(id)) {
+        tempBlindedSections = tempBlindedSections.filter(item => item !== id);
+    } else {
+        tempBlindedSections.push(id);
+    }
+    renderReorderList();
+}
+
+function moveTempSectionOrder(index, direction) {
     const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= tempSectionOrder.length) return;
 
-    if (targetIndex < 0 || targetIndex >= order.length) return;
+    const temp = tempSectionOrder[index];
+    tempSectionOrder[index] = tempSectionOrder[targetIndex];
+    tempSectionOrder[targetIndex] = temp;
 
-    const temp = order[index];
-    order[index] = order[targetIndex];
-    order[targetIndex] = temp;
-
-    localStorage.setItem(`section_order_${currentUser}`, JSON.stringify(order));
-    applySavedSectionOrder();
     renderReorderList();
 }
 
 function resetSectionOrder() {
-    if (!confirm('カードの配置を最初の状態に戻しますか？')) return;
+    if (!confirm('カードの配置と表示設定を初期状態に戻しますか？')) return;
 
-    localStorage.removeItem(`section_order_${currentUser}`);
-    applySavedSectionOrder();
+    tempSectionOrder = [...DEFAULT_SECTION_ORDER];
+    tempBlindedSections = [];
     renderReorderList();
 }
 
@@ -328,7 +441,9 @@ function deleteAccount() {
     localStorage.removeItem(`history_${currentUser}`);
     localStorage.removeItem(`section_order_${currentUser}`);
     localStorage.removeItem(`collapsed_sections_${currentUser}`);
+    localStorage.removeItem(`blinded_sections_${currentUser}`);
     localStorage.removeItem(`save_history_setting_${currentUser}`);
+    localStorage.removeItem(`dblclick_delete_setting_${currentUser}`);
 
     handleLogout();
 }
@@ -355,7 +470,7 @@ function updateThemeButtonText(theme) {
     }
 }
 
-// --- セクション開閉（状態保存付き） ---
+// --- セクション開閉 ---
 function toggleSection(sectionId) {
     const section = document.getElementById(sectionId);
     if (!section) return;
@@ -484,6 +599,7 @@ function getUserHistoryKey() {
 }
 
 function loadSearchHistory() {
+    const clearAllBtn = document.getElementById('clear-all-history-btn');
     if (!historyDiv || !currentUser) return;
 
     const historySaveSetting = localStorage.getItem(`save_history_setting_${currentUser}`);
@@ -491,6 +607,7 @@ function loadSearchHistory() {
 
     if (!isHistoryEnabled) {
         historyDiv.innerHTML = '';
+        if (clearAllBtn) clearAllBtn.style.display = 'none';
         return;
     }
 
@@ -499,12 +616,18 @@ function loadSearchHistory() {
 
     if (history.length === 0) {
         historyDiv.textContent = '履歴: なし';
+        if (clearAllBtn) clearAllBtn.style.display = 'none';
         return;
     }
+
+    if (clearAllBtn) clearAllBtn.style.display = 'block';
 
     const label = document.createElement('span');
     label.textContent = '履歴: ';
     historyDiv.appendChild(label);
+
+    const dblclickDeleteSetting = localStorage.getItem(`dblclick_delete_setting_${currentUser}`);
+    const isDblclickEnabled = dblclickDeleteSetting === null ? true : JSON.parse(dblclickDeleteSetting);
 
     history.forEach(item => {
         const span = document.createElement('span');
@@ -512,9 +635,17 @@ function loadSearchHistory() {
         
         const textNode = document.createElement('span');
         textNode.textContent = item;
+        
         textNode.onclick = () => {
             if (destinationInput) destinationInput.value = item;
         };
+
+        if (isDblclickEnabled) {
+            textNode.ondblclick = (e) => {
+                e.stopPropagation();
+                deleteHistoryItem(item);
+            };
+        }
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-history-btn';
@@ -553,6 +684,14 @@ function deleteHistoryItem(itemToDelete) {
     let history = JSON.parse(localStorage.getItem(getUserHistoryKey()) || '[]');
     history = history.filter(item => item !== itemToDelete);
     localStorage.setItem(getUserHistoryKey(), JSON.stringify(history));
+    loadSearchHistory();
+}
+
+function clearAllSearchHistory() {
+    if (!confirm('検索履歴をすべて削除しますか？')) return;
+    if (!confirm('本当にすべて消去してもよろしいですか？（この操作は取り消せません）')) return;
+
+    localStorage.removeItem(getUserHistoryKey());
     loadSearchHistory();
 }
 
