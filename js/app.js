@@ -3,7 +3,6 @@ let currentLatitude = null;
 let currentLongitude = null;
 let currentUser = null;
 let lastDestination = '';
-let currentNavitimeUrl = '';
 
 // カードの初期順序定義 (realtime-transit-section は一番下に配置)
 const DEFAULT_SECTION_ORDER = ['header-section', 'location-section', 'bus-section', 'route-section', 'realtime-transit-section'];
@@ -12,7 +11,7 @@ const SECTION_NAMES = {
     'location-section': '現在地 ＆ ルートマップ',
     'bus-section': '🚌 地域交通情報',
     'route-section': '目的地までの経路・時間予測',
-    'realtime-transit-section': '🚃 リアルタイム乗換案内 (ナビタイム連動)'
+    'realtime-transit-section': '🚃 リアルタイム乗換案内'
 };
 
 // モーダル編集時の一時変数
@@ -136,53 +135,37 @@ function getAndDisplayLocationFast() {
     );
 }
 
-// --- ナビタイムアプリ内連動処理 (エラー対策済みURL生成) ---
-function searchNavitimeInApp() {
+// --- 確実な直通ルート検索処理 (Google Maps Transitエンジン使用) ---
+function searchNavitimeExternal() {
     let origin = document.getElementById('rt-origin').value.trim();
     let destination = document.getElementById('rt-destination').value.trim();
     const mode = document.getElementById('rt-mode').value;
 
     if (!origin) {
-        alert('現在地（発駅/発バス停）を入力してください。');
+        alert('出発地点を入力してください。');
         return;
     }
     if (!destination) {
-        alert('目的地（着駅/着バス停）を入力してください。');
-        return;
-    }
-    if (!mode) {
-        alert('移動手段を選択してください。');
+        alert('目的地を入力してください。');
         return;
     }
 
-    // 「駅」の文字を自動調整してパラメータエラーを防止
-    origin = origin.replace(/駅$/, '');
-    destination = destination.replace(/駅$/, '');
+    // バス・電車を問わず確実に結果を表示できるGoogle Maps経路URL
+    let travelMode = 'transit'; // 公共交通機関（バス・電車）
+    if (mode === 'bus') travelMode = 'transit'; 
+    if (mode === 'train') travelMode = 'transit';
 
-    // ナビタイム公式の正しい乗換案内URLパラメータ構成
-    let targetUrl = `https://www.navitime.co.jp/transfer/searchlist?orvStationName=${encodeURIComponent(origin)}&dnvStationName=${encodeURIComponent(destination)}`;
-    
-    if (mode === 'train') {
-        targetUrl += `&bus=false`;
-    } else if (mode === 'bus') {
-        targetUrl += `&bus=true`;
-    }
+    const targetUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=${travelMode}`;
 
-    currentNavitimeUrl = targetUrl;
-
-    const container = document.getElementById('rt-navitime-container');
-    const iframe = document.getElementById('rt-navitime-iframe');
-
-    if (container && iframe) {
-        iframe.src = targetUrl;
-        container.style.display = 'block';
-    }
+    // 別タブで直接ルート画面を開く
+    window.open(targetUrl, '_blank');
 }
 
-function openNavitimeInNewTab() {
-    if (currentNavitimeUrl) {
-        window.open(currentNavitimeUrl, '_blank');
-    }
+// ナビタイムカードのリセット処理
+function resetNavitimeCard() {
+    document.getElementById('rt-origin').value = '';
+    document.getElementById('rt-destination').value = '';
+    document.getElementById('rt-mode').selectedIndex = 0;
 }
 
 // --- 設定モーダル制御 ---

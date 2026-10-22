@@ -88,7 +88,7 @@
                 </h2>
                 <div class="section-content">
                     <div class="search-box">
-                        <input type="text" id="destination" placeholder="目的地を入力 (例: 東京駅)">
+                        <input type="text" id="destination" placeholder="目的地を入力 (例: 野幌駅)">
                         <button onclick="calculateRouteAndDisplay()">検索</button>
                     </div>
                     
@@ -107,30 +107,27 @@
                 </div>
             </section>
 
-            <!-- 5. リアルタイム乗換案内 (最下部固定カード) -->
+            <!-- 5. リアルタイム乗換案内 -->
             <section id="realtime-transit-section" class="app-card collapsible-section" data-section-id="realtime-transit-section">
                 <h2 onclick="toggleSection('realtime-transit-section')">
-                    <span>🚃 リアルタイム乗換案内 (ナビタイム連動)</span>
+                    <span>🚃 リアルタイム乗換案内</span>
                     <span class="toggle-icon">▼</span>
                 </h2>
                 <div class="section-content">
+                    <p class="setting-subtext" style="margin-bottom: 10px; color: #8be9fd;">出発地と目的地（駅名やバス停名）を入力して検索します</p>
                     <div class="input-group-vertical">
-                        <input type="text" id="rt-origin" placeholder="現在地 (必須 ex: 野幌駅)">
-                        <input type="text" id="rt-destination" placeholder="目的地 (必須 ex: 札幌駅)">
+                        <input type="text" id="rt-origin" placeholder="出発地点 (例: 野幌駅、北海道情報大学前)">
+                        <input type="text" id="rt-destination" placeholder="目的地 (例: 札幌駅、野幌駅)">
                         <select id="rt-mode" class="custom-select">
                             <option value="" disabled selected>移動手段を選択 (必須)</option>
                             <option value="train">🚃 電車・鉄道優先</option>
                             <option value="bus">🚌 路線バス優先</option>
                             <option value="both">🚃🚌 電車＋バス両方</option>
                         </select>
-                        <button onclick="searchNavitimeInApp()" class="full-btn register-btn-style" style="margin-top: 6px; font-weight: bold;">直近のダイヤをアプリ内で検索</button>
-                    </div>
-
-                    <!-- ナビタイム結果用カード内埋め込みウィンドウ -->
-                    <div id="rt-navitime-container" style="display: none; margin-top: 15px;">
-                        <h3>正確なリアルタイム検索結果</h3>
-                        <iframe id="rt-navitime-iframe" frameborder="0" style="width: 100%; height: 420px; border-radius: 8px; border: 1px solid var(--border-color); background: #ffffff;"></iframe>
-                        <button id="rt-open-external-btn" class="full-btn" style="margin-top: 10px;" onclick="openNavitimeInNewTab()">全画面でナビタイムを開く</button>
+                        <div style="display: flex; gap: 8px; margin-top: 6px;">
+                            <button onclick="searchNavitimeExternal()" class="full-btn register-btn-style" style="margin-bottom: 0; font-weight: bold; flex: 3;">経路・時刻表を表示 ↗</button>
+                            <button onclick="resetNavitimeCard()" class="small-btn" style="background-color: #ff5555; flex: 1; font-weight: bold;">リセット</button>
+                        </div>
                     </div>
                 </div>
             </section>
